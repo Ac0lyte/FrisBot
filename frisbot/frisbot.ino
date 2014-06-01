@@ -20,16 +20,28 @@
 #
 */
 
-// Interrupt settings
-int pin_left_hall = 2;
-int int_left_hall = 0;
+#define PROGNAME "FrisBot"
+#define VERSION "v0.01"
 
-int pin_right_hall = 3;
-int int_right_hall = 1;
+// --------------------------------------------
+// Set debug to anything other the zero for debug output on the serial console
+#define DEBUG 1
+#define SERIAL_BPS 9600
+
+// --------------------------------------------
+// Interrupts used
+int pin_right_hall = 2;
+int pin_left_hall = 3;
+
+// --------------------------------------------
+// Pins used
+int int_right_hall = 0;
+int int_left_hall = 1;
 
 volatile unsigned int left_count = 0;
 volatile unsigned int right_count = 0;
 
+// --------------------------------------------
 // command queue
 #define MAX_CMD_QUEUE 1024
 
@@ -39,15 +51,18 @@ int cmd_data[MAX_CMD_QUEUE];
 int cmd_active = 0;
 int cmd_idx = 0;
 
+// --------------------------------------------
 // directions
 #define FORWARD 0
 #define REVERSE 1
 #define LEFT    2
 #define RIGHT   3
 
+// --------------------------------------------
 // states
 #define STOP 0
 
+// --------------------------------------------
 // motor control
 int left_dir = FORWARD;
 int right_dir = FORWARD;
@@ -55,20 +70,34 @@ int right_dir = FORWARD;
 int left_speed = STOP;
 int right_speed = STOP;
 
+// --------------------------------------------
 // targets
 int left_target = 0;
 int right_target = 0;
 
+int left_last = 0;
+int right_last = 0;
+
+// --------------------------------------------
 void setup()
 {
   // Attach the hall sensors interrupt routines.
   attachInterrupt(int_left_hall, left_hall, RISING);
   digitalWrite(pin_left_hall, HIGH);
 
-  attachInterrupt(int_left_hall, left_hall, RISING);
-  digitalWrite(pin_left_hall, HIGH);
+  attachInterrupt(int_right_hall, right_hall, RISING);
+  digitalWrite(pin_right_hall, HIGH);
+  
+  if( DEBUG > 0 ) {
+    Serial.begin(SERIAL_BPS);
+    Serial.print( PROGNAME );
+    Serial.print( " " );
+    Serial.println( VERSION );
+    Serial.println();
+  }
 }
 
+// --------------------------------------------
 void loop()
 {
   if( cmd_active > 0 ) {
@@ -85,7 +114,18 @@ void loop()
     }
   }
   
-  
+  if( DEBUG > 0 ) {
+    if( (left_count != left_last ) || (right_count != right_last) ){
+      left_last = left_count;
+      right_last = right_count;
+      
+      Serial.print("LEFT: ");
+      Serial.print(left_count);
+      Serial.print(" RIGHT: ");
+      Serial.print(right_count);
+      Serial.println();
+    }
+  }
 }
 
 // Inttrupts for hall counters
