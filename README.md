@@ -9,7 +9,6 @@ A frisbee based big trak clone want-to-be
 
 Current Hardware:
 * Arduino Mega2560 + Motor Shield
-   
 * Two motors mounted under a frisbee. Ripped from R/C cars,
   Including gearboxes. These are connected via the shield.
 * Hall effect sensors (one per motor)
