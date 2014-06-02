@@ -24,28 +24,13 @@
 #
 */
 
-#include "frisbot.h"
-
-#define PROGNAME "FrisBot"
-#define VERSION "v0.01"
+#include <Keypad.h>
 
 // --------------------------------------------
 // Set debug to anything other the zero for debug output on the serial console
-int DEBUG=11;
+#define DEBUG 11
 
-//#define SERIAL_BPS 9600
-#define SERIAL_BPS 57600
-
-#define DEBUG_MIN 1
-#define DEBUG_2 2
-#define DEBUG_3 3
-#define DEBUG_4 4
-#define DEBUG_5 5
-#define DEBUG_6 6
-#define DEBUG_7 7
-#define DEBUG_8 8
-#define DEBUG_9 9
-#define DEBUG_MAX 10
+#include "frisbot.h"
 
 // --------------------------------------------
 // Interrupts used
@@ -62,8 +47,28 @@ int pin_left_break = 9;
 int pin_right_speed = 11;
 int pin_left_direction = 13;
 int pin_right_direction = 13;
-int pin_right_hall = 21;
 int pin_left_hall = 20;
+int pin_right_hall = 21;
+
+// keyboards 22-37
+int pin_kb1_c1 = 22;
+int pin_kb1_c2 = 23;
+int pin_kb1_c3 = 24;
+int pin_kb1_c4 = 25;
+int pin_kb1_r1 = 26;
+int pin_kb1_r2 = 27;
+int pin_kb1_r3 = 28;
+int pin_kb1_r4 = 29;
+
+int pin_kb2_c1 = 30;
+int pin_kb2_c2 = 31;
+int pin_kb2_c3 = 32;
+int pin_kb2_c4 = 33;
+int pin_kb2_r1 = 34;
+int pin_kb2_r2 = 35;
+int pin_kb2_r3 = 36;
+int pin_kb2_r4 = 37;
+
 
 // --------------------------------------------
 // wheel turn counters
@@ -72,25 +77,13 @@ volatile unsigned int right_count = 0;
 
 // --------------------------------------------
 // command queue
-#define MAX_CMD_QUEUE 1024
-
-frisbot_cmd cmd_queue[MAX_CMD_QUEUE];
+extern frisbot_cmd cmd_queue[MAX_CMD_QUEUE];
 
 int cmd_active = FALSE;
 int cmd_index = -1;
 
 // --------------------------------------------
 // motor control
-
-// directions
-#define STOP 0
-#define SPEED_MID 127
-#define SPEED_MAX 255
-
-#define FORWARD 0
-#define REVERSE 1
-#define LEFT    2
-#define RIGHT   3
 
 int left_dir = FORWARD;
 int right_dir = FORWARD;
@@ -110,6 +103,33 @@ unsigned int left_last = 0;
 unsigned int right_last = 0;
 
 // --------------------------------------------
+// keyboard setup
+
+const byte kb_rows = 4; //four rows
+const byte kb_cols = 4; //three columns
+char kb_keys[kb_rows][kb_cols] = {
+  {'1','2','3','A'},
+  {'4','5','6','B'},
+  {'7','8','9','C'},
+  {'#','0','*','D'}
+};
+char kb2_keys[kb_rows][kb_cols] = {
+  {'q','w','e','r'},
+  {'a','s','d','f'},
+  {'z','x','c','v'},
+  {'Q','W','E','R'}
+};
+
+byte kb1_rowPins[kb_rows] = {pin_kb1_r1, pin_kb1_r2, pin_kb1_r3, pin_kb1_r4};
+byte kb1_colPins[kb_cols] = {pin_kb1_c1, pin_kb1_c2, pin_kb1_c3, pin_kb1_c4};
+Keypad keypad1 = Keypad( makeKeymap(kb_keys), kb1_rowPins, kb1_colPins, kb_rows, kb_cols );
+
+byte kb2_rowPins[kb_rows] = {pin_kb2_r1, pin_kb2_r2, pin_kb2_r3, pin_kb2_r4};
+byte kb2_colPins[kb_cols] = {pin_kb2_c1, pin_kb2_c2, pin_kb2_c3, pin_kb2_c4};
+Keypad keypad2 = Keypad( makeKeymap(kb2_keys), kb2_rowPins, kb2_colPins, kb_rows, kb_cols );
+
+
+// --------------------------------------------
 void setup()
 {
   // Show a banner if debugging
@@ -127,11 +147,13 @@ void setup()
   attachInterrupt(int_right_hall, right_hall, RISING);
   digitalWrite(pin_right_hall, HIGH);
 
+  // Break the motors
   pinMode(pin_left_break, OUTPUT);
   pinMode(pin_right_break, OUTPUT);  
   digitalWrite(pin_left_break, LOW);
   digitalWrite(pin_right_break, LOW);
   
+  // Stop the motors
   pinMode(pin_left_speed, OUTPUT);
   pinMode(pin_right_speed, OUTPUT);  
   analogWrite(pin_left_speed, STOP);
@@ -142,26 +164,7 @@ void setup()
     cmd_queue[x].command = CMD_STOP;
     cmd_queue[x].value = 0;
   }
-  
-  // Default command_queue
-  cmd_queue[0].command = CMD_SET_SPEED;
-  cmd_queue[0].value   = 64;
-  
-  cmd_queue[1].command = CMD_REVERSE;
-  cmd_queue[1].value   = 100;
-  
-  cmd_queue[2].command = CMD_CCW;
-  cmd_queue[2].value   = 10;
-  
-  cmd_queue[3].command = CMD_CW;
-  cmd_queue[3].value   = 10;
-  
-  cmd_queue[4].command = CMD_FORWARD;
-  cmd_queue[4].value   = 100;
-  
-  cmd_queue[5].command = CMD_SET_SPEED;
-  cmd_queue[5].value   = 0;
-  
+
   // indicate setup is finished if debugging.
   if( DEBUG > DEBUG_MIN ) {
     Serial.println( "------------------------------" );
@@ -176,12 +179,23 @@ void loop()
       cmd_active = FALSE;
     }
   } else {
-    if( cmd_index < MAX_CMD_QUEUE ) {
-      cmd_index++;
+    if( cmd_index <= MAX_CMD_QUEUE ) {
+      cmd_index++;      
       cmd_active = TRUE;
       set_targets();
       set_motor();
     }
+  }
+  
+  char key1 = keypad1.getKey();
+  char key2 = keypad2.getKey();
+
+  if (key1 != NO_KEY){
+    handle_keypress(key1);
+  }
+  
+  if (key2 != NO_KEY){
+    handle_keypress(key2);
   }
   
   if( DEBUG > DEBUG_MIN ) {
@@ -234,6 +248,7 @@ void set_targets() {
       analogWrite(pin_left_speed, STOP);
       analogWrite(pin_right_speed, STOP);
       break;
+
     case CMD_FORWARD:
       left_target += (cmd_queue[cmd_index].value * COUNT_PER_UNIT);
       right_target += (cmd_queue[cmd_index].value * COUNT_PER_UNIT);
@@ -242,6 +257,7 @@ void set_targets() {
       left_dir = FORWARD;
       right_dir = FORWARD;
       break;
+
     case CMD_REVERSE:
       left_target += (cmd_queue[cmd_index].value * COUNT_PER_UNIT);
       right_target += (cmd_queue[cmd_index].value * COUNT_PER_UNIT);
@@ -250,6 +266,7 @@ void set_targets() {
       left_dir = REVERSE;
       right_dir = REVERSE;
       break;
+
     case CMD_CCW:
       left_target = left_count;
       right_target += (cmd_queue[cmd_index].value * COUNT_PER_UNIT);
@@ -258,6 +275,7 @@ void set_targets() {
       left_dir = STOP;
       right_dir = FORWARD;
       break;
+
     case CMD_FWD_CCW:
       left_target = left_count;
       right_target += (cmd_queue[cmd_index].value * COUNT_PER_UNIT);
@@ -266,6 +284,7 @@ void set_targets() {
       left_dir = FORWARD;
       right_dir = FORWARD;
       break;
+
     case CMD_REV_CCW:
       left_target = left_count;
       right_target += (cmd_queue[cmd_index].value * COUNT_PER_UNIT);
@@ -274,6 +293,7 @@ void set_targets() {
       left_dir = REVERSE;
       right_dir = REVERSE;
       break;
+
     case CMD_ROT_CCW:
       left_target += (cmd_queue[cmd_index].value * COUNT_PER_UNIT);
       right_target += (cmd_queue[cmd_index].value * COUNT_PER_UNIT);
@@ -282,6 +302,7 @@ void set_targets() {
       left_dir = REVERSE;
       right_dir = FORWARD;
       break;
+
     case CMD_CW:
       left_target += (cmd_queue[cmd_index].value * COUNT_PER_UNIT);
       right_target = right_count;
@@ -290,6 +311,7 @@ void set_targets() {
       left_dir = FORWARD;
       right_dir = STOP;
       break;
+
     case CMD_FWD_CW:
       left_target += (cmd_queue[cmd_index].value * COUNT_PER_UNIT);
       right_target = right_count;
@@ -298,6 +320,7 @@ void set_targets() {
       left_dir = FORWARD;
       right_dir = FORWARD;
       break;
+
     case CMD_REV_CW:
       left_target += (cmd_queue[cmd_index].value * COUNT_PER_UNIT);
       right_target = right_count;
@@ -306,6 +329,7 @@ void set_targets() {
       left_dir = REVERSE;
       right_dir = REVERSE;
       break;
+
     case CMD_ROT_CW:
       left_target += (cmd_queue[cmd_index].value * COUNT_PER_UNIT);
       right_target += (cmd_queue[cmd_index].value * COUNT_PER_UNIT);
@@ -314,6 +338,7 @@ void set_targets() {
       left_dir = FORWARD;
       right_dir = REVERSE;
       break;
+
     case CMD_PAUSE:
       current_speed = STOP;
       pause_target = millis() + cmd_queue[cmd_index].value * MILLIS_PER_UNIT;
@@ -322,6 +347,7 @@ void set_targets() {
       left_dir = STOP;
       right_dir = STOP;
       break;
+
     case CMD_SET_SPEED:
       current_speed = cmd_queue[cmd_index].value;
       left_speed = current_speed;
@@ -404,4 +430,20 @@ void set_motor() {
 
   analogWrite(pin_left_speed, left_speed);
   analogWrite(pin_right_speed, right_speed);
+}
+
+// --------------------------------------------
+void handle_keypress( char key ) {
+  switch( key ) {
+    case 'R': 
+      load_demo();
+      cmd_index = MAX_CMD_QUEUE + 1;
+      break;
+      
+    case 'Q': // Start program execution
+      cmd_index = -1;
+      break;
+  }
+  
+  Serial.print(key);
 }
